@@ -74,10 +74,13 @@ def get_products(db: Session = Depends(get_db), user: dict = Depends(verificar_t
 
 @app.post("/api/products")
 def create_product(prod: ProductSchema, db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
+    if db.query(models.Product).filter(models.Product.code == prod.code).first():
+        raise HTTPException(status_code=400, detail="Ya existe un producto con ese código")
     nuevo = models.Product(**prod.dict())
     db.add(nuevo)
     db.commit()
-    return {"message": "Producto guardado"}
+    db.refresh(nuevo)
+    return {"message": "Producto guardado", "id": nuevo.id}
 
 @app.post("/api/sales")
 def create_sale(sale: SaleSchema, db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
