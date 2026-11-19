@@ -19,7 +19,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- SEGURIDAD ---
 SECRET_KEY = "stocklink_2026_secreto"
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
@@ -36,7 +35,6 @@ def verificar_token(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
-# --- MODELOS ---
 class ProductSchema(BaseModel):
     code: str
     name: str
@@ -49,20 +47,27 @@ class SaleSchema(BaseModel):
     total: float
     encargado: str
 
-# --- RUTAS ---
 @app.get("/")
 def home():
     return {"message": "API StockLink Segura"}
 
 @app.post("/api/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    if form_data.password == "123":
-        rol = "dueno" if "dueno" in form_data.username else "encargado"
-        token = crear_token({"sub": form_data.username, "rol": rol})
-        return {"access_token": token, "token_type": "bearer"}
-    raise HTTPException(status_code=401, detail="Contraseña incorrecta (usa 123)")
-
-# --- RUTAS PROTEGIDAS (Requieren Token) ---
+    if form_data.password != "123":
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    
+    if form_data.username == "propietario@stocklink.com":
+        rol = "propietario"
+    elif form_data.username == "encargado@stocklink.com":
+        rol = "encargado"
+    else:
+        raise HTTPException(status_code=401, detail="Correo no registrado en el sistema")
+        
+    token = crear_token({"sub": form_data.username, "rol": rol})
+    
+    # ¡AQUÍ ESTÁ LA LÍNEA QUE FALTA! Enviar el rol a Flutter
+    return {"access_token": token, "token_type": "bearer", "rol": rol}
+    
 @app.get("/api/products")
 def get_products(db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
     return db.query(models.Product).all()
