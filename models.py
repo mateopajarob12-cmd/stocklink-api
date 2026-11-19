@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 from database import Base
 import datetime
 
@@ -18,3 +18,11 @@ class Sale(Base):
     total = Column(Float)
     encargado = Column(String(100))
     time = Column(DateTime, default=datetime.datetime.now)
+
+class SaleItem(Base):
+    __tablename__ = "sale_items"
+    id = Column(Integer, primary_key=True, index=True)
+    sale_id = Column(Integer, ForeignKey("sales.id"))
+    product_id = Column(Integer, ForeignKey("products.id"))
+    quantity = Column(Integer)
+    unit_price = Column(Float)

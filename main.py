@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -43,9 +44,12 @@ class ProductSchema(BaseModel):
     minStock: int
     price: float
 
-class SaleSchema(BaseModel):
-    total: float
-    encargado: str
+class SaleItemSchema(BaseModel):
+    code: str
+    quantity: int
+
+class SaleCreateSchema(BaseModel):
+    items: List[SaleItemSchema]
 
 @app.get("/")
 def home():
@@ -83,11 +87,37 @@ def create_product(prod: ProductSchema, db: Session = Depends(get_db), user: dic
     return {"message": "Producto guardado", "id": nuevo.id}
 
 @app.post("/api/sales")
-def create_sale(sale: SaleSchema, db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
-    nueva = models.Sale(total=sale.total, encargado=sale.encargado)
+def create_sale(sale: SaleCreateSchema, db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
+    if not sale.items:
+        raise HTTPException(status_code=400, detail="La venta está vacía")
+
+    # Juntar cantidades si un código viene repetido
+    cantidades = {}
+    for it in sale.items:
+        if it.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Cantidad inválida")
+        cantidades[it.code] = cantidades.get(it.code, 0) + it.quantity
+
+    # Validar TODO el stock antes de tocar nada
+    lineas = []
+    total = 0.0
+    for code, qty in cantidades.items():
+        prod = db.query(models.Product).filter(models.Product.code == code).with_for_update().first()
+        if not prod:
+            raise HTTPException(status_code=404, detail=f"El producto {code} no existe")
+        if prod.stock < qty:
+            raise HTTPException(status_code=400, detail=f"Stock insuficiente: {prod.name}")
+        lineas.append((prod, qty))
+        total += prod.price * qty
+
+    nueva = models.Sale(total=total, encargado=user["sub"])
     db.add(nueva)
+    db.flush()
+    for prod, qty in lineas:
+        prod.stock -= qty
+        db.add(models.SaleItem(sale_id=nueva.id, product_id=prod.id, quantity=qty, unit_price=prod.price))
     db.commit()
-    return {"message": "Venta registrada"}
+    return {"message": "Venta registrada", "id": nueva.id, "total": total}
 
 @app.get("/api/sales")
 def get_sales(db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
