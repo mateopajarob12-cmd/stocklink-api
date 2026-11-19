@@ -6,3 +6,4 @@ cryptography
 python-dotenv
 python-jose[cryptography]
 certifi
+python-multipart
