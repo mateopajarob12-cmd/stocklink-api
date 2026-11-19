@@ -36,6 +36,11 @@ def verificar_token(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
+def solo_propietario(user: dict = Depends(verificar_token)):
+    if user.get("rol") != "propietario":
+        raise HTTPException(status_code=403, detail="Solo el administrador puede hacer esto")
+    return user
+
 class ProductSchema(BaseModel):
     code: str
     name: str
@@ -69,7 +74,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         
     token = crear_token({"sub": form_data.username, "rol": rol})
     
-    # ¡AQUÍ ESTÁ LA LÍNEA QUE FALTA! Enviar el rol a Flutter
     return {"access_token": token, "token_type": "bearer", "rol": rol}
     
 @app.get("/api/products")
@@ -120,5 +124,5 @@ def create_sale(sale: SaleCreateSchema, db: Session = Depends(get_db), user: dic
     return {"message": "Venta registrada", "id": nueva.id, "total": total}
 
 @app.get("/api/sales")
-def get_sales(db: Session = Depends(get_db), user: dict = Depends(verificar_token)):
+def get_sales(db: Session = Depends(get_db), user: dict = Depends(solo_propietario)):
     return db.query(models.Sale).order_by(models.Sale.time.desc()).all()
